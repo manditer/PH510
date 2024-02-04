@@ -1,37 +1,37 @@
 #!/bin/python3
-
-from mpi4py import MPI
+"""Evaluating pi using the mid-point rule, with N_SAMPLES."""
+import time
 import numpy as np
+from mpi4py import MPI
 
 # MPI.Init()
 
+start_time = time.time()
+
 comm = MPI.COMM_WORLD
 nproc = comm.Get_size()
+nworkers = nproc - 1
 rank = comm.Get_rank()
 
-N = 300000000
-I = np.array(0.0, dtype = np.double)
+N_SAMPLES = 200000000
+integral = np.array(0.0, dtype = np.double)
+steps = np.linspace(0, N_SAMPLES, nworkers+1)
 
-nworkers = nproc - 1
-
-def integrand(i):
-    x = (i+0.5) / N
-    I_estim = 4.0 / (1.0 + x*x)
-    return(I_estim)
-
-steps = np.linspace(0, N, nworkers+1)
+def integrand(j):
+    """Evaluating the mid-point rule for point j."""
+    sample_point = (j+0.5) / N_SAMPLES
+    integral_evaluation = 4.0 / (1.0 + sample_point**2)
+    return integral_evaluation
 
 if rank != 0:
-    print('rank', rank, 'range', steps[rank-1], steps[rank])
-    #range doesnt include last value, stop not inlcuded
     for i in range(int(steps[rank-1]), int(steps[rank])):
-        I += integrand(i)
+        integral += integrand(i)
 
-
-print('Rank ',rank,' computes ', I)
-summa=comm.reduce(I/N, MPI.SUM, 0)
+summa=comm.reduce(integral/N_SAMPLES, MPI.SUM, 0)
 
 if rank == 0:
-    print("Integral %.15f" % summa)
+    time_taken = time.time()-start_time
+    print("Pi estimate %.15f" % summa)
+    print('time taken %.2f' % time_taken)
 
 # MPI.Finalize()
