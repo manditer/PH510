@@ -2,24 +2,34 @@ import random
 import numpy as np
 
 
-def monte_carlo(function, N, lim_l, lim_u):
+class MonteCarloIntegrationParallel:
 
-    integral = 0
-    integral_squared = 0
-    for i in range(N):
-        xrand = random.uniform(lim_l, lim_u)
-        point = function(xrand)
-        integral += point
-        integral_squared += point**2
+    def __init__(self, N, lim_l, lim_u, function):
+        self.N = N
+        self.lim_l = lim_l
+        self.lim_u = lim_u
+        self.function = function
 
-    integral_estim = (lim_u-lim_l)/N * integral
-    variance = 1/N * ((lim_u-lim_l)/N * integral_squared - integral_estim**2)
-    #var should not be negative..
-    return integral_estim, variance
+    def monte_carlo(self):
+
+        integral = 0
+        integral_squared = 0
+        for i in range(self.N):
+            xrand = random.uniform(self.lim_l, self.lim_u)
+            point = self.function(xrand)
+            integral += point
+            integral_squared += point**2
+
+        integral_estim = (self.lim_u-self.lim_l)/self.N * integral
+
+        variance = 1/self.N * (integral_squared/self.N - (integral/self.N)**2)
+
+        return integral_estim, variance
 
 
 def func(x):
     return np.sin(x)
 
 
-print(monte_carlo(func, 10000, 0, np.pi))
+sin_monte = MonteCarloIntegrationParallel(100, 0, np.pi, func)
+print(sin_monte.monte_carlo())
