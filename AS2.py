@@ -2,6 +2,7 @@
 import random
 import numpy as np
 from mpi4py import MPI
+import time
 
 # MPI.Init()
 
@@ -23,9 +24,9 @@ class MonteCarloIntegrationParallel:
     def monte_carlo(self):
 
         if self.rank == 0:
-            data_points = int(self.N/(self.nproc)) + (self.N % self.nproc)
+            data_points = int(self.N/self.nproc) + (self.N % self.nproc)
         else:
-            data_points = int(self.N/(self.nproc))
+            data_points = int(self.N/self.nproc)
 
         integral = 0
         integral_squared = 0
@@ -48,19 +49,30 @@ class MonteCarloIntegrationParallel:
         I, var, mean = self.monte_carlo()
         integral = self.comm.reduce(I, MPI.SUM, 0)
         variance = self.comm.reduce(var, MPI.SUM, 0)
-        mean = self.comm.reduce(mean, MPI.SUM, 0)
+        mean_ = self.comm.reduce(mean, MPI.SUM, 0)
 
-        return integral, variance, mean, self.rank
+        return integral, variance, mean_, self.rank
 
 
 def func(x):
     return np.sin(x)
 
 
-sin_monte = MonteCarloIntegrationParallel(100, 0, np.pi, func, seed = 1500)
+sigma = 1
+mean = 2
+
+
+def func2(x):
+    return 1/(sigma*np.sqrt(2*np.pi)) * np.exp(-(np.abs(x-mean)**2) / (2*sigma**2))
+
+
+sin_monte = MonteCarloIntegrationParallel(5000000, mean-4*sigma, mean+4*sigma, func2, seed=165)
+start_time = time.time()
 I, var, mean, rank = sin_monte.running_in_parallel()
 
 if rank == 0:
-    print('Integral: %.5f' % I, '\nvariance: : %.5f' % var, '\nmean: %.5f: ' % mean)
+    time_taken = time.time()-start_time
+    print('Integral: %.5f' % I, '\nvariance: :', var, '\nmean: %.5f: ' % mean)
+    print('time taken %.2f' % time_taken)
 
 # MPI.Finalize()
