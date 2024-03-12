@@ -70,9 +70,9 @@ class MonteCarloIntegrationParallel:
                 positions[i][j] = rand_point[j]
             integrals_at_data_points[i] = self.function(rand_point)
 
-        volume = (self.limits[0][0] - self.limits[1][0])
+        volume = (self.limits[1][0] - self.limits[0][0])
         for i in range(self.dim - 1):
-            volume *= (self.limits[0][i + 1] - self.limits[1][i + 1])
+            volume *= (self.limits[1][i + 1] - self.limits[0][i + 1])
         integrals = volume * integrals_at_data_points / n_data_points
 
         return integrals, positions
@@ -110,9 +110,9 @@ class MonteCarloIntegrationParallel:
             gets the remainder in this case the remainder is max. 15, which adds a negligible
             amount of work to rank 0, thus not being divided between workers further"""
         if self.rank == 0:
-            data_points = int(self.n_samples / self.nproc) + (self.n_samples % self.nproc)
+            data_points = int(self.n_samples / (self.nproc)) + (self.n_samples % self.nproc)
         else:
-            data_points = int(self.n_samples / self.nproc)
+            data_points = int(self.n_samples / (self.nproc))
         return data_points
 
     def __parallel_mean_and_variance(self, means, variances, d_points):
@@ -171,7 +171,7 @@ class MonteCarloIntegrationParallel:
             print('\n\n')
 
 
-DIMENSIONS = 6
+DIMENSIONS = 1
 MEAN = np.ones(DIMENSIONS) * 0
 SIGMA = 1
 
@@ -202,7 +202,7 @@ def gaussian(points):
 bottom_lims = MEAN - 5 * SIGMA
 top_lims = MEAN + 5 * SIGMA
 limits = [bottom_lims, top_lims]
-SEED = 69697
+SEED = 1010
 N_DATAPOINTS = 100000
 
 sin_monte = MonteCarloIntegrationParallel(N_DATAPOINTS, limits, gaussian,
