@@ -16,14 +16,13 @@ class MonteCarloIntegrationParallel:
     def __init__(self, n_samples, integral_limits, function, dim, seed=10000,
                                                     importance_sampling=None):
         """ initialising monte carlo integrator, estimated using n_samples random data points,
-            given upper and lower limits of function lim_l and lim_u, the function that is being
+            given upper and lower limits of function, the function that is being
             evaluated, the dimensions of the problem, an optional seed for random data point
             generation and if importance sampling is optionally used, the sampling function and
             its inverse can also be given. Parallelization is also initialised, and a seed
             sequence is initialised for each worker"""
         self.n_samples = n_samples
         self.limits = integral_limits
-        self.mean = MEAN
         self.function = function
         self.seed = seed
         self.dim = dim
@@ -38,8 +37,8 @@ class MonteCarloIntegrationParallel:
     def __main_monte_carlo(self):
         """the main monte_carlo function that calls for other functions. Finds the number of
             data points to be analysed by that worker, spawns appropriate seeds, and finds
-            the integrals and positions depending on if importance sampling is or isn't used
-            the means and variances of both are found from the integral and position arrays"""
+            the integrals and positions depending on if importance sampling is or isn't used.
+            The means and variances of both are found from the integral and position arrays"""
         n_data_points = self.__n_data_points()
         grand_child_ss = self.child_ss[self.rank].spawn(n_data_points)
 
@@ -58,8 +57,8 @@ class MonteCarloIntegrationParallel:
         return integral_estim, integral_var, pos_average, pos_variance, n_data_points
 
     def __random_sampled_monte_carlo(self, n_data_points, grand_child_ss):
-        """monte carlo integration without importance sampling for given number of data
-            points and a seed sequence random sampling points come from a uniform distribution
+        """Monte carlo integration without importance sampling for given number of data
+            points and a seed sequence. Random sampling points come from a uniform distribution
             makes an array out of the position and integrals to be sent back"""
         integrals_at_data_points = np.zeros(n_data_points)
         positions = np.zeros((n_data_points, self.dim))
@@ -79,8 +78,8 @@ class MonteCarloIntegrationParallel:
 
     def __importance_sampled_monte_carlo(self, n_data_points, grand_child_ss):
         """monte carlo integration with importance sampling for given number of data
-            points and a seed sequence also requires a sampling function and its
-            inverse for the random data point distribution makes an array out of
+            points and a seed sequence. Also requires a sampling function and its
+            inverse for the random data point distribution. Makes an array out of
             the position and integrals to be sent back"""
         integrals_at_data_points = np.zeros((n_data_points, self.dim))
         positions = np.zeros((n_data_points, self.dim))
@@ -106,8 +105,8 @@ class MonteCarloIntegrationParallel:
 
     def __n_data_points(self):
         """function that divides the number of sample points given to the monte carlo integrator
-            between the workers each worker gets the same amount of data points, but rank 0 also
-            gets the remainder in this case the remainder is max. 15, which adds a negligible
+            between the workers. Each worker gets the same amount of data points, but rank 0 also
+            gets the remainder. In this case the remainder is max. 15, which adds a negligible
             amount of work to rank 0, thus not being divided between workers further"""
         if self.rank == 0:
             data_points = int(self.n_samples / (self.nproc)) + (self.n_samples % self.nproc)
@@ -117,7 +116,7 @@ class MonteCarloIntegrationParallel:
 
     def __parallel_mean_and_variance(self, means, variances, d_points):
         """function that calculates the parallel mean and variance of an array with several means
-            and an array with several variances as different members of the arrays may have been
+            and an array with several variances. As different members of the arrays may have been
             generated from more data points than others, the weight of value is also included"""
         tot_mean = 0
         for i in range(self.nproc):
@@ -144,7 +143,7 @@ class MonteCarloIntegrationParallel:
 
     def running_in_parallel(self):
         """function that manages running the monte carlo in parallel gathers the integrals,
-            positions, variances and data points per worker into arrays worker 0 sends
+            positions, variances and data points per worker into arrays. Worker 0 sends
             these to be found a global average and variance of and prints out the results"""
         start_time = time.time()
         integral, integral_variance, pos_mean, pos_var, d_points = self.__main_monte_carlo()
@@ -203,7 +202,7 @@ bottom_lims = MEAN - 5 * SIGMA
 top_lims = MEAN + 5 * SIGMA
 limits = [bottom_lims, top_lims]
 SEED = 1010
-N_DATAPOINTS = 100000
+N_DATAPOINTS = 10000
 
 sin_monte = MonteCarloIntegrationParallel(N_DATAPOINTS, limits, gaussian,
                                           DIMENSIONS, SEED)
