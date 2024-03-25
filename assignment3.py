@@ -4,6 +4,7 @@ time module for timing the speed of the monte carlo class"""
 import time
 import numpy as np
 from mpi4py import MPI
+import matplotlib.pyplot as plt
 
 
 # MPI.Init()
@@ -39,27 +40,30 @@ class MonteCarlo:
             The means and variances of both are found from the integral and position arrays"""
         n_walks_per_worker = self.__n_walks_per_worker()
 
-        #random walk
+        # random walk
         end_positions = self.__random_walk(self.start_pos, n_walks_per_worker)
-        pos_average = np.array((np.mean(end_positions[0], axis=0),  np.mean(end_positions[1], axis=0)))
-        pos_variance = np.array((np.var(end_positions[0], axis=0), np.var(end_positions[1], axis=0)))
+        pos_average = np.mean(end_positions, axis=0)
+        pos_variance = np.var(end_positions, axis=0)
 
-        return pos_average, pos_variance, n_walks_per_worker
+        return end_positions, pos_average, pos_variance, n_walks_per_worker
 
     def __random_walk(self, start, n_walks):
-        end_pos = np.zeros((n_walks, self.dim))
+        end_pos = []  # np.zeros((n_walks, self.dim))
         start_x = start[0]
         start_y = start[1]
+        seed = self.child_ss[self.rank]
+        rng = np.random.default_rng(seed)
 
         for i in range(n_walks):
             xs = [start_x]
             ys = [start_y]
             current_pos = [start_x, start_y]
-            #print('iter', i)
-            #print(xs)
-            #print(ys)
+            # print('iter', i)
+            # print(xs)
+            # print(ys)
             while True:
-                rand_point = np.random.uniform(0, 1)
+                rand_point = rng.uniform(0, 1)
+                # print(self.rank, rand_point)
                 # right
                 if rand_point <= 0.25:
                     current_pos[0] = current_pos[0] + 1
@@ -78,13 +82,15 @@ class MonteCarlo:
                 if current_pos[0] == self.limits[1] or current_pos[1] == self.limits[1] or \
                         current_pos[0] == self.limits[0] or current_pos[1] == self.limits[0]:
                     break
-            end_pos[i][0] = current_pos[0]
-            end_pos[i][1] = current_pos[1]
+            end_pos.append(current_pos)
+            # end_pos[i][0] = current_pos[0]
+            # end_pos[i][1] = current_pos[1]
 
-            #print(end_pos[i][0], end_pos[i][1])
-        #print(end_pos)
+            # print(end_pos[i][0], end_pos[i][1])
+        # print('rank', self.rank)
+        # print(end_pos)
+        # print(xs, ys)
         return end_pos
-
 
     def __n_walks_per_worker(self):
         """function that divides the number of sample points given to the monte carlo integrator
@@ -124,15 +130,40 @@ class MonteCarlo:
             positions, variances and data points per worker into arrays. Worker 0 sends
             these to be found a global average and variance of and prints out the results"""
         start_time = time.time()
-        pos_mean, pos_var, d_points = self.__main_monte_carlo()
+        positions, pos_mean, pos_var, d_points = self.__main_monte_carlo()
 
-        positions = np.asarray(self.comm.gather(pos_mean, root=0), dtype=float)
+        positions = np.asarray(self.comm.reduce(positions, MPI.SUM, root=0))
+        position_averages = np.asarray(self.comm.gather(pos_mean, root=0), dtype=float)
         position_variances = np.asarray(self.comm.gather(pos_var, root=0), dtype=float)
         d_points = np.asarray(self.comm.gather(d_points, root=0), dtype=float)
 
         if self.rank == 0:
-            position_mean, position_variance = self.__parallel_mean_and_variance(positions,
-                                                position_variances, d_points)
+            # print(positions[:,0])
+
+            unique, counts = np.unique(positions, return_counts=True, axis=0)
+            plt.figure()
+            s = 300
+            marker = 's'
+            plt.scatter(self.start_pos[0], self.start_pos[1], c='w', s=s, edgecolors='black')
+
+            x = unique[:, 0]
+            y = unique[:, 1]
+            plt.scatter(x, y, c=counts / np.sum(counts), s=s, marker=marker, cmap='Reds')
+            # for i in range(np.size(counts)):
+            #    print(unique[i], counts[i])
+            #    plt.scatter(unique[i][0],unique[i][1], c=counts[i], s=s, marker = marker, cmap='Reds')
+            plt.grid()
+            plt.colorbar()
+            plt.xlim(self.limits[0] - 0.5, self.limits[1] + 0.5)
+            plt.ylim(self.limits[0] - 0.5, self.limits[1] + 0.5)
+            plt.xticks(np.linspace(self.limits[0], self.limits[1], np.abs(self.limits[0]) + np.abs(self.limits[1]) + 1))
+            plt.yticks(np.linspace(self.limits[0], self.limits[1], np.abs(self.limits[0]) + np.abs(self.limits[1]) + 1))
+            plt.show()
+            print(unique, counts)
+            print(counts / np.sum(counts))
+
+            position_mean, position_variance = self.__parallel_mean_and_variance(position_averages,
+                                                                                 position_variances, d_points)
             time_taken = time.time() - start_time
             self.print_init_info()
             print('position mean:', np.round(position_mean, 4))
@@ -144,9 +175,9 @@ class MonteCarlo:
 
 DIMENSIONS = 2
 SEED = 1010
-LIMITS = np.array((0, 10))
-N_DATAPOINTS =  1000000
-start_pos = [5, 5]
+LIMITS = np.array((-5, 5))
+N_DATAPOINTS = 16
+start_pos = [1, 3]
 
 monte = MonteCarlo(N_DATAPOINTS, LIMITS, DIMENSIONS, start_pos, seed=SEED)
 monte.running_in_parallel()
