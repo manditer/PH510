@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 
 # MPI.Init()
+# next: - fix doc strings, fix errors, implement feedback modifications, check poisson equations
 
 class MonteCarlo:
     """ Monte Carlo class for integrating in parallel, can use either evenly distributed sampling
@@ -68,6 +69,8 @@ class MonteCarlo:
 
 
 class Integrator(MonteCarlo):
+    """docstring"""
+
     def __init__(self, n_samples, limits, dim, seed=10000, function=None, importance_sampling=None):
         super().__init__(n_samples, limits, dim, seed)
         self.function = function
@@ -157,9 +160,9 @@ class Integrator(MonteCarlo):
 
         if self.rank == 0:
             integral_mean, integral_variance = super().parallel_mean_and_variance(integrals,
-                                                                                  integral_variances, d_points)
+                                                                      integral_variances, d_points)
             position_mean, position_variance = super().parallel_mean_and_variance(positions,
-                                                                                  position_variances, d_points)
+                                                                      position_variances, d_points)
             time_taken = time.time() - start_time
             super().print_init_info()
             print('\nIntegral: %.8f' % integral_mean, ' +-  %.8f' %
@@ -172,47 +175,52 @@ class Integrator(MonteCarlo):
 
 
 def run_gaussian_integral_mc():
-    DIMENSIONS = 1
-    MEAN = np.ones(DIMENSIONS) * 0
-    SIGMA = 1
+    """docstring"""
+    dimensions = 1
+    mean = np.ones(dimensions) * 0
+    sigma = 1
 
     def importance_sampling_function_gauss(points):
         """importance sampling function for a given data point (in 1 or more dimensions)"""
-        integrand = np.exp(-np.abs(points[0] - MEAN[0]))
-        for i in range(DIMENSIONS - 1):
-            integrand *= np.exp(-np.abs(points[i + 1] - MEAN[i + 1]))
+        integrand = np.exp(-np.abs(points[0] - mean[0]))
+        for i in range(dimensions - 1):
+            integrand *= np.exp(-np.abs(points[i + 1] - mean[i + 1]))
         return integrand
 
     def importance_sampling_function_inverse_gauss(point):
         """inverse of importance sampling function for a given data point (in 1 or more
             dimensions) used for inverse transform sampling"""
-        return np.sign(point) * (-np.log(1 - np.abs(point))) + MEAN
+        return np.sign(point) * (-np.log(1 - np.abs(point))) + mean
 
     def gaussian(points):
         """gaussian function for a given data point (in 1 or more dimensions)"""
         dim = np.size(points)
-        covar_matrix = np.eye(dim) * SIGMA ** 2
+        covar_matrix = np.eye(dim) * sigma ** 2
         gauss = 1 / (np.sqrt((2 * np.pi) ** dim * np.linalg.det(covar_matrix))) * \
-                np.exp((-1 / 2) * (points - MEAN).T @ (np.linalg.inv(covar_matrix) @ (points - MEAN)))
+                np.exp((-1 / 2) * (points - mean).T @ (np.linalg.inv(covar_matrix)
+                                                       @ (points - mean)))
         return gauss
 
-    bottom_lims = MEAN - 5 * SIGMA
-    top_lims = MEAN + 5 * SIGMA
+    bottom_lims = mean - 5 * sigma
+    top_lims = mean + 5 * sigma
     limits = [bottom_lims, top_lims]
-    SEED = 1010
-    N_DATAPOINTS = 10000
+    seed = 1010
+    n_datapoints = 10000
 
-    monte = Integrator(N_DATAPOINTS, limits, DIMENSIONS, seed=SEED, function=gaussian)
+    monte = Integrator(n_datapoints, limits, dimensions, seed=seed, function=gaussian)
     monte.integrator_running_in_parallel()
 
-    monte = Integrator(N_DATAPOINTS, limits, DIMENSIONS, seed=SEED, function=gaussian,
+    monte = Integrator(n_datapoints, limits, dimensions, seed=seed, function=gaussian,
                        importance_sampling=[importance_sampling_function_gauss,
                                             importance_sampling_function_inverse_gauss])
     monte.integrator_running_in_parallel()
 
 
 class RandomWalk(MonteCarlo):
-    def __init__(self, n_samples, limits, dim, seed=10000, start_pos=None, potentials=None, poisson=None):
+    """docstring"""
+
+    def __init__(self, n_samples, limits, dim, seed=10000, start_pos=None, potentials=None,
+                 poisson=None):
         super().__init__(n_samples, limits, dim, seed)
         self.start_pos = start_pos
         self.potentials = potentials
@@ -224,23 +232,27 @@ class RandomWalk(MonteCarlo):
             the integrals and positions depending on if importance sampling is or isn't used.
             The means and variances of both are found from the integral and position arrays"""
         n_walks_per_worker = super().n_data_points()
-        end_positions, poisson_eval = self.__random_walk(self.start_pos, n_walks_per_worker)
+        end_positions, sample_error, poisson_eval = self.__random_walk(self.start_pos,
+                                                                       n_walks_per_worker)
         potentials = self.__random_walk_evaluate_potential(end_positions)
         pos_average = np.mean(end_positions, axis=0)
         pos_variance = np.var(end_positions, axis=0)
 
-        return end_positions, potentials, pos_average, pos_variance, n_walks_per_worker, poisson_eval
+        return end_positions, sample_error, potentials, pos_average, pos_variance, \
+               n_walks_per_worker, poisson_eval
 
     def __random_walk(self, start, n_walks):
+        """docstring"""
         end_pos = []
         start_x = start[0]
         start_y = start[1]
         seed = self.child_ss[self.rank]
         rng = np.random.default_rng(seed)
         poisson_eval = []
-        for i in range(n_walks):
-            xs = [start_x]
-            ys = [start_y]
+        random_values = []
+        for _ in range(n_walks):
+            x_values = [start_x]
+            y_values = [start_y]
             current_pos = [start_x, start_y]
             while True:
                 if current_pos[0] >= self.limits[1] or current_pos[1] >= self.limits[1] or \
@@ -249,6 +261,7 @@ class RandomWalk(MonteCarlo):
                 if self.poisson_function is not None:
                     poisson_eval.append(self.poisson_function(current_pos))
                 rand_point = rng.uniform(0, 1)
+                random_values.append(rand_point)
                 # print(self.rank, rand_point)
                 # right
                 if rand_point <= 0.25:
@@ -262,32 +275,37 @@ class RandomWalk(MonteCarlo):
                 # down
                 if 0.75 < rand_point <= 1:
                     current_pos[1] = current_pos[1] - 0.5
-                xs.append(current_pos[0])
-                ys.append(current_pos[1])
+                x_values.append(current_pos[0])
+                y_values.append(current_pos[1])
 
             end_pos.append(current_pos)
 
-        all_positions = np.vstack((xs, ys)).T.tolist()
+        # all_positions = np.vstack((x_values, y_values)).T.tolist()
         poisson_eval = np.mean(poisson_eval)
-        return end_pos, poisson_eval
+        return end_pos, random_values, poisson_eval
 
-    def __random_walk_plot_green(self, pos_and_prob):
-        s = 300
+    def __random_walk_plot_green(self, pos_and_prob, error):
+        """docstring"""
+        size = 300
         marker = 's'
 
         plt.figure()
-        plt.scatter(self.start_pos[0], self.start_pos[1], c='w', s=s, edgecolors='black')
-        plt.scatter(pos_and_prob[:, 0], pos_and_prob[:, 1], c=pos_and_prob[:, 2], s=s, marker=marker, cmap='Reds')
+        plt.scatter(self.start_pos[0], self.start_pos[1], c='w', s=size, edgecolors='black')
+        plt.scatter(pos_and_prob[:, 0], pos_and_prob[:, 1], c=pos_and_prob[:, 2], s=size,
+                    marker=marker, cmap='Reds')
         plt.grid()
         cbar = plt.colorbar()
         cbar.set_label('Probability')
         plt.xlim(self.limits[0] - 0.5, self.limits[1] + 0.5)
         plt.ylim(self.limits[0] - 0.5, self.limits[1] + 0.5)
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.xticks(np.linspace(self.limits[0], self.limits[1], np.int(self.limits[0] + self.limits[1] + 1)))
-        plt.yticks(np.linspace(self.limits[0], self.limits[1], np.int(self.limits[0] + self.limits[1] + 1)))
-        plt.title(f'Greens function, start position {self.start_pos}')
+        plt.xlabel('x (cm)')
+        plt.ylabel('y (cm)')
+        plt.xticks(np.linspace(self.limits[0], self.limits[1],
+                               np.int(self.limits[0] + self.limits[1] + 1)))
+        plt.yticks(np.linspace(self.limits[0], self.limits[1],
+                               np.int(self.limits[0] + self.limits[1] + 1)))
+        std = np.format_float_scientific(error, precision=2)
+        plt.title(f'Greens function, start position {self.start_pos}, std {std}')
         plt.show()
 
         plt.figure()
@@ -316,34 +334,36 @@ class RandomWalk(MonteCarlo):
         if np.size(top) != 0:
             plt.plot(np.asarray(top)[:, 0], np.asarray(top)[:, 1], label='top')
             plt.scatter(np.asarray(top)[:, 0], np.asarray(top)[:, 1])
-        plt.xticks(np.linspace(self.limits[0], self.limits[1], np.int(self.limits[0] + self.limits[1] + 1)))
-        plt.xlabel('axis of respective boundary in legend')
+        plt.xticks(np.linspace(self.limits[0], self.limits[1], np.int(self.limits[0] +
+                                                                      self.limits[1] + 1)))
+        plt.xlabel('axis of respective boundary in legend cm')
         plt.ylabel('probability')
-        plt.title('Greens function')
+        plt.title(f'Greens function, start position {self.start_pos}, std {std}')
         plt.grid()
         plt.legend()
         plt.show()
 
     def __random_walk_evaluate_potential(self, positions):
+        """docstring"""
         potential = 0
         unique, counts = np.unique(positions, return_counts=True, axis=0)
         pos_and_prob = np.column_stack((unique, counts / np.sum(counts)))
 
         for i in range(np.size(pos_and_prob, 0)):
-            x = pos_and_prob[i][0]
-            y = pos_and_prob[i][1]
+            x_coords = pos_and_prob[i][0]
+            y_coords = pos_and_prob[i][1]
             prob = pos_and_prob[i][2]
 
-            if y == self.limits[1]:
+            if y_coords == self.limits[1]:
                 potential += prob * self.potentials[0]
                 ##up
-            if x == self.limits[1]:
+            if x_coords == self.limits[1]:
                 ##right
                 potential += prob * self.potentials[1]
-            if y == self.limits[0]:
+            if y_coords == self.limits[0]:
                 ##down
                 potential += prob * self.potentials[2]
-            if x == self.limits[0]:
+            if x_coords == self.limits[0]:
                 ##left
                 potential += prob * self.potentials[3]
 
@@ -354,63 +374,81 @@ class RandomWalk(MonteCarlo):
             positions, variances and data points per worker into arrays. Worker 0 sends
             these to be found a global average and variance of and prints out the results"""
         start_time = time.time()
-        positions, potentials, pos_mean, pos_var, d_points, poisson_evals = self.__main_random_walk()
+
+        positions, random_values, potentials, pos_mean, pos_var, d_points, \
+        poisson_evals = self.__main_random_walk()
+
         positions = np.asarray(self.comm.reduce(positions, MPI.SUM, root=0))
+        random_values = np.asarray(self.comm.reduce(random_values, MPI.SUM, root=0))
+
         potentials = np.asarray(self.comm.gather(potentials, root=0), dtype=float)
+
         position_averages = np.asarray(self.comm.gather(pos_mean, root=0), dtype=float)
         position_variances = np.asarray(self.comm.gather(pos_var, root=0), dtype=float)
+
         d_points = np.asarray(self.comm.gather(d_points, root=0), dtype=float)
+
         poisson_eval = np.asarray(self.comm.gather(poisson_evals, root=0))
 
         if self.rank == 0:
             unique, counts = np.unique(positions, return_counts=True, axis=0)
             pos_and_prob = np.column_stack((unique, counts / np.sum(counts)))
-            potential = self.__random_walk_evaluate_potential(pos_and_prob)
+            error = np.std(random_values) / np.sqrt(np.size(random_values))
 
             position_mean, position_variance = super().parallel_mean_and_variance(position_averages,
-                                                                                  position_variances, d_points)
+                                                                      position_variances, d_points)
             time_taken = time.time() - start_time
-            self.__random_walk_plot_green(pos_and_prob)
+            self.__random_walk_plot_green(pos_and_prob, error)
             super().print_init_info()
             print('potential boundaries: ', self.potentials)
             print('starting position:', self.start_pos)
-            print('potential', np.mean(potentials), '+-', np.var(potentials))
+            print('potential', np.format_float_scientific(np.mean(potentials), precision=2), '+-',
+                  np.format_float_scientific(np.mean(potentials) * error, precision=2))
             print('position mean:', np.round(position_mean, 4))
             print('position variance:', np.round(position_variance, 4), '\nposition std:',
                   np.round(np.sqrt(position_variance), 4))
             if self.poisson_function is not None:
-                print('poisson expectation value', np.mean(poisson_eval), '/e0')
+                print('poisson expectation value',
+                      np.format_float_scientific(np.mean(poisson_eval), precision=2),
+                      '/ e0')
             print('time taken %.2f' % time_taken)
             print('\n\n')
 
 
 def run_random_walk_mc():
-    DIMENSIONS = 2
-    SEED = 35
+    """docstring"""
+    dimensions = 2
+    seed = 35
     # in cm
-    LIMITS = np.array((0, 10))
-    N_DATAPOINTS = 1000
+    limits = np.array((0, 10))
+    n_datapoints = 10000
     start_pos = np.array((5, 5))
     # up, right, down, left
     potentials = [2, -4, 0, 2]
 
-    e0 = 1  # 8.8542*10**-12
+    permittivity = 1  # 8.8542*10**-12
+    # 1, 2 or 3 in accordance to assignment question
+    poisson_task = 2
 
-    def poisson_func1(location):
-        cd = 1 / 0.1 ** 2
-        return -cd / e0
+    def poisson_func(location):
+        """docstring"""
+        if poisson_task == 1:
+            charge_density = 1 / 0.1 ** 2
 
-    def poisson_func2(location):
-        ycoord = location[1]
-        cd = 0.1 * ycoord
-        return -cd / e0
+        if poisson_task == 2:
+            ycoord = location[1]
+            charge_density = 0.1 * ycoord / 0.1 ** 2
 
-    def poisson_func3(location):
-        cd = -2 * np.exp(-2 * np.abs(np.sqrt((location[0] * 0.1) ** 2 + (location[1] * 0.1) ** 2)))
-        return -cd / e0
+        if poisson_task == 3:
+            charge_density = -2 * np.exp(-2 * np.abs(np.sqrt((location[0] * 0.1) ** 2 + \
+                                                             (location[1] * 0.1) ** 2)))
 
-    monte = RandomWalk(N_DATAPOINTS, LIMITS, DIMENSIONS, seed=SEED, start_pos=start_pos, potentials=potentials,
-                       poisson=poisson_func1)
+        evaluation = -charge_density / permittivity
+
+        return evaluation
+
+    monte = RandomWalk(n_datapoints, limits, dimensions, seed=seed, start_pos=start_pos,
+                       potentials=potentials, poisson=poisson_func)
     monte.random_walk_running_in_parallel()
 
 
