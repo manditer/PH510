@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 
 
 # MPI.Init()
-# next: - fix doc strings, fix errors, implement feedback modifications, check poisson equations
 
 class MonteCarlo:
     """ Monte Carlo class for initializing parallel running and a few global functions"""
@@ -266,11 +265,11 @@ class RandomWalk(MonteCarlo):
         for _ in range(n_walks):
             current_pos = [start[0], start[1]]
             while True:
-                if current_pos[0] >= self.limits[1] or current_pos[1] >= self.limits[1] or \
-                        current_pos[0] <= self.limits[0] or current_pos[1] <= self.limits[0]:
-                    break
                 if self.poisson_function is not None:
                     poisson_eval.append(self.poisson_function(current_pos))
+                if current_pos[0] > self.limits[1] or current_pos[1] > self.limits[1] or \
+                        current_pos[0] < self.limits[0] or current_pos[1] < self.limits[0]:
+                    break
                 rand_point = rng.uniform(0, 1)
                 random_values.append(rand_point)
                 # right
@@ -311,8 +310,8 @@ class RandomWalk(MonteCarlo):
                                np.int(self.limits[0] + self.limits[1] + 1)))
         plt.yticks(np.linspace(self.limits[0], self.limits[1],
                                np.int(self.limits[0] + self.limits[1] + 1)))
-        std = np.format_float_scientific(error, precision=2)
-        plt.title(f'Greens function, start position {self.start_pos}, std {std}')
+        error = np.format_float_scientific(error, precision=2)
+        plt.title(f'Greens function, start position {self.start_pos}, std {error}')
         plt.show()
 
         plt.figure()
@@ -321,13 +320,13 @@ class RandomWalk(MonteCarlo):
         bottom = []
         top = []
         for i in range(np.size(pos_and_prob[:, 0])):
-            if pos_and_prob[i][0] == self.limits[0]:
+            if pos_and_prob[i][0] < self.limits[0]:
                 left.append([pos_and_prob[i][1], pos_and_prob[i][2]])
-            if pos_and_prob[i][0] == self.limits[1]:
+            if pos_and_prob[i][0] > self.limits[1]:
                 right.append([pos_and_prob[i][1], pos_and_prob[i][2]])
-            if pos_and_prob[i][1] == self.limits[0]:
+            if pos_and_prob[i][1] < self.limits[0]:
                 bottom.append([pos_and_prob[i][0], pos_and_prob[i][2]])
-            if pos_and_prob[i][1] == self.limits[1]:
+            if pos_and_prob[i][1] > self.limits[1]:
                 top.append([pos_and_prob[i][0], pos_and_prob[i][2]])
         if np.size(left) != 0:
             plt.plot(np.asarray(left)[:, 0], np.asarray(left)[:, 1], label='left')
@@ -345,7 +344,7 @@ class RandomWalk(MonteCarlo):
                                                                       self.limits[1] + 1)))
         plt.xlabel('axis of respective boundary in legend cm')
         plt.ylabel('probability')
-        plt.title(f'Greens function, start position {self.start_pos}, std {std}')
+        plt.title(f'Greens function, start position {self.start_pos}, std {error}')
         plt.grid()
         plt.legend()
         plt.show()
@@ -365,16 +364,16 @@ class RandomWalk(MonteCarlo):
             y_coords = pos_and_prob[i][1]
             prob = pos_and_prob[i][2]
 
-            if y_coords == self.limits[1]:
+            if y_coords > self.limits[1]:
                 potential += prob * self.potentials[0]
                 ##up
-            if x_coords == self.limits[1]:
+            if x_coords > self.limits[1]:
                 ##right
                 potential += prob * self.potentials[1]
-            if y_coords == self.limits[0]:
+            if y_coords < self.limits[0]:
                 ##down
                 potential += prob * self.potentials[2]
-            if x_coords == self.limits[0]:
+            if x_coords < self.limits[0]:
                 ##left
                 potential += prob * self.potentials[3]
 
@@ -404,7 +403,6 @@ class RandomWalk(MonteCarlo):
             unique, counts = np.unique(positions, return_counts=True, axis=0)
             pos_and_prob = np.column_stack((unique, counts / np.sum(counts)))
             error = np.std(random_vals) / np.sqrt(np.size(random_vals))
-
             position_mean, position_variance = super().parallel_mean_and_variance(position_means,
                                                         position_variances, d_points)
             time_taken = time.time() - start_time
@@ -435,14 +433,14 @@ def run_random_walk_mc():
     seed = 35
     # in cm
     limits = np.array((0, 10))
-    n_datapoints = 100000
-    start_pos = np.array((5, 5))
+    n_datapoints = 10000
+    start_pos = np.array((5,5))
     # up, right, down, left
-    potentials = [0, 1, 0, 1]
+    potentials = [2, -4, 0, 2]
 
     permittivity = 1  # 8.8542*10**-12
     # 1, 2 or 3 in accordance to assignment question
-    poisson_task = 2
+    poisson_task = 3
 
     def poisson_func(location):
         """Defining the poisson functions from the assignment sheet for evaluation."""
@@ -451,14 +449,13 @@ def run_random_walk_mc():
 
         if poisson_task == 2:
             ycoord = location[1]
-            charge_density = 0.1 * ycoord / 0.1 ** 2
+            charge_density = 0.1 * ycoord / (0.1 ** 2)
 
         if poisson_task == 3:
-            charge_density = -2 * np.exp(-2 * np.abs(np.sqrt((location[0] * 0.1) ** 2 + \
-                                                             (location[1] * 0.1) ** 2)))
+            radius = np.sqrt(((5-location[0])*0.1)**2 + ((5-location[1])*0.1)**2)
+            charge_density = -2 * np.exp(-2 * np.abs(radius))
 
         evaluation = -charge_density / permittivity
-
         return evaluation
 
     monte = RandomWalk(n_datapoints, limits, dimensions, seed=seed, start_pos=start_pos,
